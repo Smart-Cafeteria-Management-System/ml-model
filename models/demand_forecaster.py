@@ -31,35 +31,38 @@ class DemandForecaster:
         self.is_trained = False
         self.training_metrics = {}
         
-        # Rule-based fallback values
+        # Rule-based fallback values (Amrita Vishwa Vidyapeetham specific)
         self.base_demand = {
-            'breakfast': 80,
-            'lunch': 150,
-            'dinner': 120
+            'breakfast': 300,
+            'lunch': 500,
+            'snacks': 200,
+            'dinner': 700
         }
         
         self.weather_factors = {
-            'sunny': 1.1,
-            'cloudy': 1.0,
-            'rainy': 0.8,
-            'stormy': 0.6
+            'sunny': 1.0,
+            'cloudy': 0.97,
+            'rainy': 0.82,
+            'stormy': 0.62,
+            'hot': 0.90,
+            'cold': 0.93
         }
         
         self.schedule_factors = {
             'regular': 1.0,
-            'exams': 1.2,
-            'holiday': 0.3,
-            'weekend': 0.5
+            'exams': 0.95,
+            'holiday': 0.17,
+            'weekend': 0.80
         }
         
         self.day_factors = {
-            'monday': 0.95,
-            'tuesday': 1.0,
-            'wednesday': 1.05,
-            'thursday': 1.0,
-            'friday': 0.9,
-            'saturday': 0.5,
-            'sunday': 0.4
+            'monday': 1.02,
+            'tuesday': 1.00,
+            'wednesday': 0.98,
+            'thursday': 1.01,
+            'friday': 0.95,
+            'saturday': 0.82,
+            'sunday': 0.78
         }
         
         # Try to load pretrained model
@@ -233,19 +236,41 @@ class DemandForecaster:
         # Prepare features
         X = self._prepare_features(input_data)
         
-        # Predict
+        # Predict using ensemble - get individual tree predictions for confidence
         prediction = self.model.predict(X)[0]
         prediction = max(5, int(round(prediction)))
         
-        # Calculate confidence based on model metrics
+        # Calculate per-prediction confidence using tree variance
         base_confidence = 100 - self.training_metrics.get('test_mape', 20)
         
-        # Adjust confidence for unusual conditions
-        confidence = base_confidence
+        # Get individual tree predictions to measure agreement
+        X_values = X.values if hasattr(X, 'values') else X
+        tree_predictions = np.array([tree.predict(X_values)[0] for tree in self.model.estimators_])
+        tree_std = np.std(tree_predictions)
+        tree_mean = np.mean(tree_predictions) if np.mean(tree_predictions) > 0 else 1
+        coefficient_of_variation = (tree_std / tree_mean) * 100
+        
+        # Higher tree disagreement = lower confidence
+        variance_penalty = min(15, coefficient_of_variation * 0.8)
+        confidence = base_confidence - variance_penalty
+        
+        # Adjust for conditions
         if weather in ['rainy', 'stormy']:
             confidence -= 5
+        if weather == 'cloudy':
+            confidence -= 2
         if schedule in ['holiday', 'exams']:
             confidence -= 3
+        if schedule == 'weekend':
+            confidence -= 2
+        
+        # Per-meal adjustment (breakfast is harder to predict)
+        meal_adjustments = {'breakfast': -3, 'lunch': 1, 'dinner': 0}
+        confidence += meal_adjustments.get(meal_type, 0)
+        
+        # Weekend days are less predictable
+        if day_of_week.lower() in ['saturday', 'sunday']:
+            confidence -= 2
         
         confidence = min(95, max(60, int(confidence)))
         
@@ -302,7 +327,7 @@ class DemandForecaster:
         day_of_week = date.strftime('%A').lower()
         
         predictions = {}
-        for meal in ['breakfast', 'lunch', 'dinner']:
+        for meal in ['breakfast', 'lunch', 'snacks', 'dinner']:
             predictions[meal] = self.predict(meal, weather, schedule, day_of_week, date)
         
         return predictions
