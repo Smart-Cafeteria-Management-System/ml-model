@@ -160,8 +160,9 @@ def get_weather():
 
 
 if __name__ == '__main__':
-    print("Starting ML Prediction API on port 5001...")
+    port = int(os.environ.get('PORT', 5001))
+    print(f"Starting ML Prediction API on port {port}...")
     print(f"Location: Coimbatore (Ettimadai) [{COIMBATORE_LAT}, {COIMBATORE_LON}]")
     print("Real-time weather: Open-Meteo API")
-    # Run the Flask app on port 5001 for Go Backend integration
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Run the Flask app (PORT from env for Railway, default 5001 for local dev)
+    app.run(host='0.0.0.0', port=port, debug=False)
