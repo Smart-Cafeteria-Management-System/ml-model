@@ -4,55 +4,63 @@
 [![Library](https://img.shields.io/badge/library-Scikit--learn-F7931E?style=flat&logo=scikit-learn)](https://scikit-learn.org/)
 [![API](https://img.shields.io/badge/api-Flask-000000?style=flat&logo=flask)](https://flask.palletsprojects.com/)
 
-The intelligence layer of the Smart Cafeteria system. Uses machine learning to forecast student demand based on real-world contextual factors including weather, academic schedules, and historical patterns.
+The intelligence layer of the Smart Cafeteria system. Designed to optimize food preparation, minimize waste, and forecast student demand based on real-world contextual factors.
 
 ---
 
-## 🧠 Model Specifications
-- **Model Type**: Random Forest Regressor (Ensemble Learning)
-- **Primary Function**: Meal-wise student demand prediction
-- **Accuracy Grade**: **81.52%** (Current Evaluation)
+## 🧠 1. Model Architecture & Specifications
+
+The predicting engine operates as a standalone microservice to ensure heavy computation does not block user traffic on the Go API.
+
+- **Model Type:** Random Forest Regressor (Ensemble Learning). Joblib serialized.
+- **Accuracy Grade:** **81.52%** 
 - **MAE**: ~6.0 | **MAPE**: ~18.5%
 
-### **Feature Inputs**:
-| Feature | Description |
-|---------|-------------|
-| **Day of Week** | Weekend dips vs mid-week peaks |
-| **Meal Type** | Breakfast, Lunch, Snacks, Dinner |
-| **Weather** | Real-time data from Open-Meteo API (Sunny, Rainy, Cloudy) |
-| **Temperature** | Actual temperature in °C (from Open-Meteo) |
-| **Academic Schedule** | Regular classes, exam periods, holidays, weekends |
-| **Month & Season** | Seasonal demand patterns |
+### Features Used for Inference
+1. **Date / Day of Week** (Captures weekend drops vs mid-week peaks).
+2. **Meal Type** (Breakfast, Lunch, Snacks, Dinner).
+3. **Weather & Temp** -> Live-fetched from the Open-Meteo REST API.
+4. **Academic Schedule** (Exams, regular classes, holidays).
 
-### **Training Data**:
-- **Source**: Authentic data generated using real weather data for **Coimbatore (Amrita Vishwa Vidyapeetham)**
-- **Weather API**: Open-Meteo Historical Weather API
-- **Academic Calendar**: Real exam schedules, semester breaks, and national holidays
-- **Coverage**: June 2025 – February 2026 (~800+ records)
-- **Fallback**: Rule-based prediction when model confidence is low
+### Fallback Architecture
+If the API fails to fetch live weather or confidence drops below a set threshold, the system automatically falls back to a deterministic rule-based calculation to ensure the cafeteria staff always get a number.
 
 ---
 
-## 🛠 Tech Stack
-- **Language**: Python 3.9+
-- **Machine Learning**: Scikit-Learn, Pandas, NumPy
-- **API Wrapper**: Flask (REST API with CORS)
-- **Real-Time Weather**: Open-Meteo API integration
-- **Model Persistence**: Joblib serialization
+## 💻 2. Developer Documentation
+
+### Prerequisites
+- [Python](https://www.python.org/) (3.11+)
+
+### Local Setup
+```bash
+# 1. Create and activate a Virtual Environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Start the Flask Service (Starts on Port 5001)
+python api/predict_api.py
+```
+
+### Continuous Integration (CI/CD)
+The `.github/workflows/ci.yml` action runs:
+1. `py_compile` syntax checks.
+2. Verified imports test for Flask, NumPy, Pandas, and Scikit-learn.
+3. Automatically builds the Docker image.
 
 ---
 
-## 📡 API Endpoints
+## 🔌 3. API Documentation
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check and model status |
-| `POST` | `/predict` | Single meal prediction (date, meal, weather, schedule) |
-| `GET` | `/predict/day?date=YYYY-MM-DD` | Full day forecast (all 4 meals with auto weather fetch) |
+This service is primarily internal. It is meant to be called by the `Go Backend`, not directly by the Frontend or end-users.
 
-### Example Request
+### `POST /predict`
+Predict demand for a specific, isolated meal configuration.
+**Payload:**
 ```json
-POST /predict
 {
   "date": "2026-02-21",
   "meal_type": "lunch",
@@ -61,8 +69,7 @@ POST /predict
   "schedule": "regular"
 }
 ```
-
-### Example Response
+**Response:**
 ```json
 {
   "predicted_demand": 285,
@@ -72,31 +79,21 @@ POST /predict
 }
 ```
 
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Install ML dependencies
-pip install -r requirements.txt
-
-# 2. Run the prediction service
-python api/predict_api.py
-```
-
-The service runs on `http://localhost:5001`. The **Go Backend** calls this service for forecast endpoints.
+### `GET /predict/day?date=YYYY-MM-DD`
+Automatically fetches the weather for the requested date and runs predictions across all 4 meal types simultaneously.
+**Response:** Returns an array of predictions mapped to breakfast, lunch, snacks, and dinner.
 
 ---
 
-## 📂 Directory Structure
+## 📂 4. Project Structure (Data & Code)
 ```
 ml-model/
 ├── api/
-│   └── predict_api.py         # Flask REST API with weather integration
+│   └── predict_api.py         # Flask REST API Controller
 ├── data/
-│   ├── generate_dataset.py    # Authentic data generation (real weather + academic calendar)
-│   └── training_data.csv      # Historical dataset (~800+ records)
+│   ├── generate_dataset.py    # Synthetic + Real weather data generation engine
+│   └── training_data.csv      # Historical dataset (~800+ records for Coimbatore)
 └── models/
-    ├── demand_forecaster.py   # DemandForecaster class (train, predict, evaluate)
-    └── random_forest.joblib   # Serialized trained model
+    ├── demand_forecaster.py   # SKLearn training & evaluation logic
+    └── random_forest.joblib   # Serialized production model
 ```
